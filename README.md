@@ -32,7 +32,7 @@ git clone https://github.com/Badi21/saas-reverse
 cd saas-reverse
 npm install
 cp .env.example .env.local
-# add GROQ_API_KEY to .env.local (free at console.groq.com)
+# add GROQ_API_KEY (free at console.groq.com) and DATABASE_URL (free at neon.tech) to .env.local
 npm run dev
 ```
 
@@ -64,10 +64,10 @@ This version uses Python (Scrapling + DDGS) and pulls in a few more sources than
 
 ```bash
 npx vercel deploy
-# set GROQ_API_KEY (and APIFY_API_TOKEN if you use the Apify fallback) in Vercel environment variables
+# set GROQ_API_KEY, DATABASE_URL (and APIFY_API_TOKEN if you use the Apify fallback) in Vercel environment variables
 ```
 
-The cache and history live in SQLite, in the OS temp directory so the write works on Vercel's read-only function filesystem. That means the file resets on cold start and isn't shared across instances, it's a per-instance cache, not a durable one. Under real traffic that's still useful (a warm instance serving several requests for the same popular domain skips the rescrape), just don't expect the history list to hold everything forever. A durable version would need Postgres instead of SQLite.
+The cache and history live in Postgres (Neon), over their serverless HTTP driver, no connection pooling to manage. Shared across every instance, so under real concurrent traffic the cache actually works the way it's supposed to: the first person to analyze a domain pays the scrape-plus-LLM cost, everyone else within the 6-hour window gets the cached result, regardless of which instance handled their request.
 
 `/api/analyze` sets `maxDuration = 60`, since the scrape-plus-analysis pipeline usually takes 30-50 seconds. That's the ceiling on Vercel's Hobby plan; Pro allows longer if you need more headroom.
 
@@ -85,7 +85,7 @@ src/
 │     └─ history/route.ts      last 20 analyses, for the homepage list
 └─ lib/
    ├─ rate-limit.ts            in-memory sliding-window limiter per IP
-   ├─ db.ts                    SQLite (better-sqlite3) repository
+   ├─ db.ts                    Postgres (Neon serverless driver) repository
    ├─ agents.ts                the two-wave analysis pipeline
    └─ verify-claims.ts         checks [SEEN] price/percentage claims against the scrape
 ```
@@ -94,7 +94,7 @@ What happens on a request to `/api/analyze`:
 
 1. Rate limit check first: 8 requests per 10 minutes per IP. This runs before any scraping, so someone hammering the endpoint can't run up the Groq bill.
 2. Cache check: if the domain was analyzed in the last 6 hours, it returns that result immediately. No re-scrape, no LLM calls.
-3. Otherwise it scrapes the site (SSRF guards active) and runs the analysis pipeline, then writes the finished result to SQLite.
+3. Otherwise it scrapes the site (SSRF guards active) and runs the analysis pipeline, then writes the finished result to Postgres.
 
 ### The analysis pipeline
 
@@ -117,7 +117,7 @@ Rate limiting is still a plain in-memory `Map`, not shared across instances. On 
 
 - Next.js 15 (App Router) + Tailwind CSS
 - Groq SDK, Llama 3.3 70B for the analysis
-- better-sqlite3 for the cache and history, no external DB
+- Postgres (Neon) via `@neondatabase/serverless` for the cache and history
 - Python (Scrapling, DDGS, HN Algolia API, Reddit search) in the Claude Code skill only
 - SSRF protection: private IP blocking, DNS validation, manual redirect tracking
 

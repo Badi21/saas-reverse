@@ -309,7 +309,7 @@ export async function POST(req: NextRequest) {
   const domain = new URL(safeBase).hostname;
 
   if (!force) {
-    const cached = getCachedAnalysis(domain, CACHE_TTL_MS);
+    const cached = await getCachedAnalysis(domain, CACHE_TTL_MS);
     if (cached) {
       return new Response(cached.content, {
         headers: {
@@ -346,7 +346,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (fullOutput.length > 100) {
-    saveAnalysis({ domain, title: meta.title, description: meta.description, content: fullOutput });
+    await saveAnalysis({ domain, title: meta.title, description: meta.description, content: fullOutput });
   }
 
   // ponytail: the agents above already ran to completion, so this isn't a

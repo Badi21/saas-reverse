@@ -36,7 +36,9 @@ This only catches numeric claims, since those are the only ones cheap to check w
 
 ### Analysis cache and history (`src/lib/db.ts`)
 
-Completed analyses get cached in SQLite for 6 hours, keyed by domain, and the same rows populate the "recently analyzed" list on the homepage. Every query goes through `better-sqlite3` prepared statements, no string-built SQL, so there's no injection surface. The stored content is model output rendered as Markdown on the client (`react-markdown`), not raw HTML, so it isn't a stored-XSS vector either.
+Completed analyses get cached in Postgres (Neon) for 6 hours, keyed by domain, and the same rows populate the "recently analyzed" list on the homepage. Every query goes through the Neon driver's tagged-template interface, which parameterizes automatically, no string-built SQL, so there's no injection surface. The stored content is model output rendered as Markdown on the client (`react-markdown`), not raw HTML, so it isn't a stored-XSS vector either.
+
+This used to be SQLite written to `/tmp`, which worked but meant the cache reset on every cold start and wasn't shared across instances. Moving to Neon fixes that: the cache is now genuinely shared, which matters more the more concurrent traffic this gets.
 
 ### Supported versions
 

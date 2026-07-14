@@ -1,31 +1,38 @@
-import Database from 'better-sqlite3';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 
-// Vercel's deploy filesystem is read-only outside /tmp, so this always
-// targets the OS temp dir rather than cwd. On Vercel that means the file
-// resets on cold start and isn't shared across instances - fine as a
-// per-instance cache, not a durable one. See SECURITY.md.
-const DATA_DIR = path.join(os.tmpdir(), 'saas-reverse-data');
-const DB_PATH = path.join(DATA_DIR, 'analyses.db');
+// Lazy on purpose: Next.js imports route modules at build time to collect
+// page data, before real env vars exist. Calling neon() at module load
+// crashed the build with "no connection string provided".
+let sql: NeonQueryFunction<false, false> | null = null;
+function getSql(): NeonQueryFunction<false, false> {
+  if (!sql) {
+    if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL not configured.');
+    sql = neon(process.env.DATABASE_URL);
+  }
+  return sql;
+}
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+let schemaReady: Promise<void> | null = null;
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS analyses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain TEXT NOT NULL UNIQUE,
-    title TEXT,
-    description TEXT,
-    content TEXT NOT NULL,
-    created_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at);
-`);
+function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    const db = getSql();
+    schemaReady = (async () => {
+      await db`
+        CREATE TABLE IF NOT EXISTS analyses (
+          id SERIAL PRIMARY KEY,
+          domain TEXT NOT NULL UNIQUE,
+          title TEXT,
+          description TEXT,
+          content TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        )
+      `;
+      await db`CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at)`;
+    })();
+  }
+  return schemaReady;
+}
 
 export interface StoredAnalysis {
   domain: string;
@@ -35,35 +42,44 @@ export interface StoredAnalysis {
   created_at: number;
 }
 
-const getByDomainStmt = db.prepare(
-  'SELECT domain, title, description, content, created_at FROM analyses WHERE domain = ?'
-);
+// Postgres BIGINT comes back from the driver as a string, to avoid silently
+// truncating values past Number.MAX_SAFE_INTEGER. Our timestamps never get
+// that large, so it's safe to normalize back to a number here.
+function normalizeRow(row: Record<string, unknown>): StoredAnalysis {
+  return { ...row, created_at: Number(row.created_at) } as StoredAnalysis;
+}
 
-const upsertStmt = db.prepare(`
-  INSERT INTO analyses (domain, title, description, content, created_at)
-  VALUES (@domain, @title, @description, @content, @created_at)
-  ON CONFLICT(domain) DO UPDATE SET
-    title = excluded.title,
-    description = excluded.description,
-    content = excluded.content,
-    created_at = excluded.created_at
-`);
-
-const recentStmt = db.prepare(
-  'SELECT domain, title, description, content, created_at FROM analyses ORDER BY created_at DESC LIMIT ?'
-);
-
-export function getCachedAnalysis(domain: string, maxAgeMs: number): StoredAnalysis | null {
-  const row = getByDomainStmt.get(domain) as StoredAnalysis | undefined;
-  if (!row) return null;
+export async function getCachedAnalysis(domain: string, maxAgeMs: number): Promise<StoredAnalysis | null> {
+  await ensureSchema();
+  const rows = await getSql()`
+    SELECT domain, title, description, content, created_at
+    FROM analyses WHERE domain = ${domain}
+  `;
+  if (!rows[0]) return null;
+  const row = normalizeRow(rows[0]);
   if (Date.now() - row.created_at > maxAgeMs) return null;
   return row;
 }
 
-export function saveAnalysis(analysis: Omit<StoredAnalysis, 'created_at'>): void {
-  upsertStmt.run({ ...analysis, created_at: Date.now() });
+export async function saveAnalysis(analysis: Omit<StoredAnalysis, 'created_at'>): Promise<void> {
+  await ensureSchema();
+  const created_at = Date.now();
+  await getSql()`
+    INSERT INTO analyses (domain, title, description, content, created_at)
+    VALUES (${analysis.domain}, ${analysis.title}, ${analysis.description}, ${analysis.content}, ${created_at})
+    ON CONFLICT (domain) DO UPDATE SET
+      title = excluded.title,
+      description = excluded.description,
+      content = excluded.content,
+      created_at = excluded.created_at
+  `;
 }
 
-export function listRecentAnalyses(limit = 20): StoredAnalysis[] {
-  return recentStmt.all(limit) as StoredAnalysis[];
+export async function listRecentAnalyses(limit = 20): Promise<StoredAnalysis[]> {
+  await ensureSchema();
+  const rows = await getSql()`
+    SELECT domain, title, description, content, created_at
+    FROM analyses ORDER BY created_at DESC LIMIT ${limit}
+  `;
+  return rows.map(normalizeRow);
 }
