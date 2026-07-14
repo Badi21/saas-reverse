@@ -1,8 +1,13 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Vercel's deploy filesystem is read-only outside /tmp, so this always
+// targets the OS temp dir rather than cwd. On Vercel that means the file
+// resets on cold start and isn't shared across instances - fine as a
+// per-instance cache, not a durable one. See SECURITY.md.
+const DATA_DIR = path.join(os.tmpdir(), 'saas-reverse-data');
 const DB_PATH = path.join(DATA_DIR, 'analyses.db');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });

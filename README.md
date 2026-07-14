@@ -64,10 +64,12 @@ This version uses Python (Scrapling + DDGS) and pulls in a few more sources than
 
 ```bash
 npx vercel deploy
-# set GROQ_API_KEY in Vercel environment variables
+# set GROQ_API_KEY (and APIFY_API_TOKEN if you use the Apify fallback) in Vercel environment variables
 ```
 
-The cache and history live in `data/analyses.db` (SQLite), created on first request. On Vercel that file resets on every cold start unless you mount it on persistent storage. Fine for a demo, not for keeping history long term.
+The cache and history live in SQLite, in the OS temp directory so the write works on Vercel's read-only function filesystem. That means the file resets on cold start and isn't shared across instances, it's a per-instance cache, not a durable one. Under real traffic that's still useful (a warm instance serving several requests for the same popular domain skips the rescrape), just don't expect the history list to hold everything forever. A durable version would need Postgres instead of SQLite.
+
+`/api/analyze` sets `maxDuration = 60`, since the scrape-plus-analysis pipeline usually takes 30-50 seconds. That's the ceiling on Vercel's Hobby plan; Pro allows longer if you need more headroom.
 
 ---
 

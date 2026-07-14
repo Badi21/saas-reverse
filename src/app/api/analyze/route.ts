@@ -5,6 +5,11 @@ import { getCachedAnalysis, saveAnalysis } from '@/lib/db';
 import { verifySeenClaims } from '@/lib/verify-claims';
 import { runAnalysisPipeline } from '@/lib/agents';
 
+// Scrape + 4 Groq calls regularly runs 30-50s. Vercel's default function
+// timeout is 10s, so this has to be explicit or real requests get killed
+// mid-analysis. 60s is the ceiling on Hobby; Pro allows more if needed.
+export const maxDuration = 60;
+
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const MAX_CONTENT_PER_PAGE = 4000;
 const FETCH_TIMEOUT_MS = 7000;
