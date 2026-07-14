@@ -3,6 +3,7 @@ import Groq from 'groq-sdk';
 import dns from 'dns';
 import { checkRateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
 import { getCachedAnalysis, saveAnalysis } from '@/lib/db';
+import { verifySeenClaims } from '@/lib/verify-claims';
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -438,6 +439,14 @@ export async function POST(req: NextRequest) {
             fullOutput += text;
             controller.enqueue(encoder.encode(text));
           }
+        }
+
+        const checks = verifySeenClaims(fullOutput, content);
+        const failed = checks.filter(c => !c.verified);
+        if (failed.length > 0) {
+          const footer = `\n\n---\n*Verification: ${failed.length} of ${checks.length} [SEEN] figures could not be found in the scraped source (${failed.map(c => c.claim).join(', ')}). Treat those as unconfirmed.*`;
+          controller.enqueue(encoder.encode(footer));
+          fullOutput += footer;
         }
       } finally {
         controller.close();

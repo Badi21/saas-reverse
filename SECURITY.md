@@ -26,6 +26,14 @@ This covers the common SSRF-to-internal-network and SSRF-to-cloud-metadata patte
 
 It's in-memory and per-process: resets on redeploy, doesn't share state across multiple serverless instances. That's fine for a single-instance deployment. Behind a load balancer running several instances, you'd want a shared store instead (Upstash Redis, Vercel KV) so the limit actually holds.
 
+### Claim verification (`src/lib/verify-claims.ts`)
+
+The model is instructed to tag every claim as `[SEEN]` (present in the scraped page) or `[INFERRED]` (a guess), but that tag is self-reported by the same model that can hallucinate. Nothing stopped it from writing `[SEEN] $8/seat/month` for a number it made up.
+
+After the stream finishes, `verifySeenClaims()` pulls every dollar amount and percentage out of lines tagged `[SEEN]` and checks whether that exact figure appears in the scraped source text. Anything that doesn't match gets flagged in a footer appended to the response, and that footer gets cached along with the rest so repeat views see it too.
+
+This only catches numeric claims, since those are the only ones cheap to check without a second LLM call. A `[SEEN]` claim like "supports SSO" isn't verified this way, it would need either a second model pass or a rule-based check against known SSO indicators in the HTML, and neither is built yet.
+
 ### Analysis cache and history (`src/lib/db.ts`)
 
 Completed analyses get cached in SQLite for 6 hours, keyed by domain, and the same rows populate the "recently analyzed" list on the homepage. Every query goes through `better-sqlite3` prepared statements, no string-built SQL, so there's no injection surface. The stored content is model output rendered as Markdown on the client (`react-markdown`), not raw HTML, so it isn't a stored-XSS vector either.
