@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: #080808;
+  color: #e5e2e1;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0e0e0e; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+/* Blueprint prose */
+.prose-blueprint h1,
+.prose-blueprint h2,
+.prose-blueprint h3 {
+  color: #f0f0f0;
+  font-weight: 600;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+.prose-blueprint h2 {
+  border-bottom: 1px solid #1a1a1a;
+  padding-bottom: 0.35rem;
+  margin-top: 1.75rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a3e635;
+  font-family: var(--font-geist-mono), monospace;
+}
+.prose-blueprint h3 {
+  font-size: 0.85rem;
+  color: #d4d4d4;
+}
+.prose-blueprint p,
+.prose-blueprint li {
+  color: #a1a1aa;
+  line-height: 1.75;
+  font-size: 0.875rem;
+}
+.prose-blueprint strong { color: #e4e4e7; }
+.prose-blueprint code {
+  background: #131313;
+  border: 1px solid #1e1e1e;
+  padding: 0.1em 0.4em;
+  font-size: 0.8em;
+  color: #a3e635;
+  font-family: var(--font-geist-mono), monospace;
+}
+.prose-blueprint pre {
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  padding: 1rem;
+  overflow-x: auto;
+}
+.prose-blueprint pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #c1c1c1;
+}
+.prose-blueprint ul { list-style: none; padding-left: 0; }
+.prose-blueprint ul li {
+  padding-left: 1.1em;
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+.prose-blueprint ul li::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: #a3e635;
+  font-family: var(--font-geist-mono), monospace;
+}
+.prose-blueprint table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin: 1rem 0;
+}
+.prose-blueprint th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #1a1a1a;
+  color: #71717a;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.prose-blueprint td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #111;
+  color: #a1a1aa;
+  vertical-align: top;
+}
+.prose-blueprint blockquote {
+  border-left: 2px solid #a3e635;
+  background: #0c0c0c;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.8rem;
+  color: #71717a;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #a3e635;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s ease-in-out infinite;
+}
