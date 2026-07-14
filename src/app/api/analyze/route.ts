@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import dns from 'dns';
+import { checkRateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const MAX_CONTENT_PER_PAGE = 4000;
@@ -352,6 +353,15 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'GROQ_API_KEY not configured.' }, { status: 500 });
+  }
+
+  const clientKey = clientKeyFromHeaders(req.headers);
+  const rateLimit = checkRateLimit(clientKey);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many analyses from this IP. Try again in a few minutes.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
   }
 
   let rawDomain: string;
