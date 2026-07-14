@@ -77,6 +77,30 @@ body {
   color: #a3e635;
   font-family: var(--font-geist-mono), monospace;
 }
+.prose-blueprint ol {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: item;
+}
+.prose-blueprint ol li {
+  counter-increment: item;
+  padding-left: 2em;
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+.prose-blueprint ol li::before {
+  content: counter(item) '.';
+  position: absolute;
+  left: 0;
+  min-width: 1.5em;
+  color: #a3e635;
+  font-family: var(--font-geist-mono), monospace;
+}
+.prose-blueprint hr {
+  border: none;
+  border-top: 1px solid #1a1a1a;
+  margin: 1.5rem 0;
+}
 .prose-blueprint table {
   width: 100%;
   border-collapse: collapse;

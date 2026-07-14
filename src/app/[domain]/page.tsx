@@ -5,6 +5,18 @@ import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+// Mirrors the real pipeline stages (scrape, then the parallel agents, then
+// the build-prompt synthesis, then claim verification) rather than made-up
+// filler, since the wait really is that long and this is what's happening.
+const STAGES = [
+  'Scraping the site...',
+  'Reading pricing, features & positioning...',
+  'Sizing up the moat, churn risk & differentiation...',
+  'Mapping the tech stack & build complexity...',
+  'Writing the build prompt...',
+  'Double-checking the numbers...',
+];
+
 export default function AnalyzePage() {
   const params = useParams();
   const router = useRouter();
@@ -15,6 +27,7 @@ export default function AnalyzePage() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [resolvedDomain, setResolvedDomain] = useState(rawDomain);
+  const [stageIndex, setStageIndex] = useState(0);
   const outputRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
 
@@ -24,6 +37,15 @@ export default function AnalyzePage() {
     run();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!loading) return;
+    setStageIndex(0);
+    const interval = setInterval(() => {
+      setStageIndex(i => (i + 1 < STAGES.length ? i + 1 : i));
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   async function run(force = false) {
     setLoading(true);
@@ -116,16 +138,22 @@ export default function AnalyzePage() {
           </div>
         )}
 
-        {/* Loading skeleton */}
+        {/* Loading status */}
         {loading && !output && (
-          <div className="space-y-3">
-            {[80, 60, 90, 50, 70].map((w, i) => (
-              <div
-                key={i}
-                className="h-3 bg-[#141414] rounded animate-pulse"
-                style={{ width: `${w}%` }}
-              />
-            ))}
+          <div className="space-y-6 py-2">
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse flex-shrink-0" />
+              <span className="font-mono text-sm text-zinc-400">{STAGES[stageIndex]}</span>
+            </div>
+            <div className="space-y-3">
+              {[80, 60, 90, 50, 70].map((w, i) => (
+                <div
+                  key={i}
+                  className="h-3 bg-[#141414] rounded animate-pulse"
+                  style={{ width: `${w}%` }}
+                />
+              ))}
+            </div>
           </div>
         )}
 
