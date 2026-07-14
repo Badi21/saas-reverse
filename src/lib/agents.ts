@@ -95,15 +95,13 @@ Output ONLY these sections, in this exact order and format:
 ${sections}`;
 }
 
-function buildPromptSynthesisPrompt(domain: string, meta: SiteMeta, content: string, analysis: string): string {
+// No raw scraped content here on purpose - wave one's combined output
+// already carries every fact the build prompt needs, and resending the
+// full scrape a 4th time was pure token waste (see isDailyQuotaError).
+function buildPromptSynthesisPrompt(domain: string, analysis: string): string {
   return `Here is a venture-analyst breakdown of ${domain} written by another analyst:
 
 ${analysis}
-
----
-
-Original scraped content, for anything the breakdown above didn't cover:
-${content}
 
 ---
 
@@ -112,17 +110,48 @@ Using that breakdown, output ONLY this section. Keep it consistent with the feat
 ${BUILD_PROMPT_SECTION}`;
 }
 
+// Structural checks rather than `instanceof Groq.APIError` - tsx/Node's
+// CJS interop can load groq-sdk as two separate module instances in some
+// setups, which silently breaks instanceof. status/error are stable public
+// fields on the SDK's error shape regardless of which instance created it.
+function apiErrorStatus(err: unknown): number | undefined {
+  return err && typeof err === 'object' && 'status' in err ? (err as { status?: number }).status : undefined;
+}
+
+export function isRateLimitError(err: unknown): boolean {
+  return apiErrorStatus(err) === 429;
+}
+
+// Groq's 429 covers two very different situations: a short-lived per-minute
+// burst (worth retrying) and the daily token quota being fully used up
+// (retrying does nothing - the message says "try again in 1h", not 1.5s).
+export function isDailyQuotaError(err: unknown): boolean {
+  if (!isRateLimitError(err)) return false;
+  const message = err instanceof Error ? err.message : String(err);
+  return message.toLowerCase().includes('per day');
+}
+
+const RETRY_DELAYS_MS = [1500, 4000];
+
 async function runAgent(groq: Groq, userPrompt: string, maxTokens: number): Promise<string> {
-  const completion = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.3,
-    max_tokens: maxTokens,
-  });
-  return completion.choices[0]?.message?.content?.trim() || '';
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: maxTokens,
+      });
+      return completion.choices[0]?.message?.content?.trim() || '';
+    } catch (err) {
+      const canRetry = isRateLimitError(err) && !isDailyQuotaError(err) && attempt < RETRY_DELAYS_MS.length;
+      if (!canRetry) throw err;
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
 }
 
 // Two-wave pipeline instead of one giant sequential completion. Wave one
@@ -146,7 +175,7 @@ export async function runAnalysisPipeline(
   ]);
 
   const analysis = [core, strategy, tech].join('\n\n');
-  const buildPrompt = await runAgent(groq, buildPromptSynthesisPrompt(domain, meta, content, analysis), 1300);
+  const buildPrompt = await runAgent(groq, buildPromptSynthesisPrompt(domain, analysis), 1300);
 
   return [analysis, buildPrompt].join('\n\n');
 }

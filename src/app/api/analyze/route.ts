@@ -3,7 +3,7 @@ import dns from 'dns';
 import { checkRateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
 import { getCachedAnalysis, saveAnalysis } from '@/lib/db';
 import { verifySeenClaims } from '@/lib/verify-claims';
-import { runAnalysisPipeline } from '@/lib/agents';
+import { runAnalysisPipeline, isRateLimitError, isDailyQuotaError } from '@/lib/agents';
 
 // Scrape + 4 Groq calls regularly runs 30-50s. Vercel's default function
 // timeout is 10s, so this has to be explicit or real requests get killed
@@ -259,7 +259,10 @@ async function scrapeSaaS(base: string): Promise<{ content: string; meta: { titl
     }
   });
 
-  let content = sections.join('\n\n---\n\n').slice(0, 14000);
+  // Three of the four agent calls each get this full string as input, so
+  // every char here costs 3x the tokens it used to under the single-prompt
+  // design. Trimmed from 14000 to help the free-tier Groq daily quota last.
+  let content = sections.join('\n\n---\n\n').slice(0, 9000);
 
   // Fallback: if direct scrape got too little (blocked by bot protection), try Apify
   if (content.length < 500) {
@@ -335,8 +338,14 @@ export async function POST(req: NextRequest) {
   let fullOutput: string;
   try {
     fullOutput = await runAnalysisPipeline(apiKey, domain, meta, content);
-  } catch {
-    return NextResponse.json({ error: 'Analysis failed. Try again in a moment.' }, { status: 502 });
+  } catch (err) {
+    console.error(`[analyze] pipeline failed for ${domain}:`, err);
+    const message = isDailyQuotaError(err)
+      ? "Groq's free-tier daily token quota is used up for today. Try again in about an hour."
+      : isRateLimitError(err)
+      ? "We're getting a lot of analyses right now and hit Groq's rate limit. Try again in a minute."
+      : 'Analysis failed. Try again in a moment.';
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   const checks = verifySeenClaims(fullOutput, content);
