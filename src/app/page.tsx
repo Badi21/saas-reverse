@@ -67,7 +67,7 @@ export default function Home() {
             <span className="font-mono text-sm font-bold tracking-tight">saas-reverse</span>
           </div>
           <a
-            href="https://github.com/veyralabsgroup/saas-reverse"
+            href="https://github.com/Badi21/saas-reverse"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs font-mono text-zinc-600 hover:text-zinc-300 transition-colors"
@@ -216,10 +216,9 @@ export default function Home() {
             <span className="font-mono text-xs">saas-reverse</span>
           </div>
           <p className="font-mono text-xs text-zinc-700">
-            by{' '}
-            <a href="https://veyralabs.com" className="hover:text-zinc-400 transition-colors">VeyraLabs</a>
+            <a href="https://github.com/Badi21/saas-reverse" className="hover:text-zinc-400 transition-colors">open source</a>
             {' '}&middot;{' '}
-            <a href="https://github.com/veyralabsgroup/saas-reverse" className="hover:text-zinc-400 transition-colors">open source</a>
+            <a href="https://github.com/Badi21/saas-reverse/blob/main/LICENSE" className="hover:text-zinc-400 transition-colors">GPL-3.0</a>
           </p>
         </div>
       </footer>

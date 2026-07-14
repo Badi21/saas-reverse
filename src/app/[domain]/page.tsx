@@ -81,7 +81,7 @@ export default function AnalyzePage() {
           saas-reverse
         </button>
         <a
-          href="https://github.com/veyralabsgroup/saas-reverse"
+          href="https://github.com/Badi21/saas-reverse"
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-zinc-700 hover:text-zinc-400 transition-colors flex items-center gap-1.5"
