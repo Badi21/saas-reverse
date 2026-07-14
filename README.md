@@ -98,16 +98,17 @@ What happens on a request to `/api/analyze`:
 
 ### The analysis pipeline
 
-One giant prompt asking for every section at once is slow and gives the model more room to wander. `src/lib/agents.ts` splits it into two waves instead:
+`src/lib/agents.ts` runs two sequential Groq calls per analysis: one that covers everything (what it does, pricing, moat, churn, tech stack, build complexity) in one pass, then a second that reads that output and writes the final build prompt, so it doesn't end up contradicting the features or tech stack already described above it.
 
-- **Wave one, three agents in parallel:** a product/business agent (what it does, target users, features, pricing), a strategy agent (moat, churn, differentiation), and a tech agent (stack, build complexity, pages, user flows). Same source content, same rules, each one only asked for its own slice. Wall-clock time is roughly the slowest of the three, not their sum.
-- **Wave two, one agent:** takes wave one's combined output plus the original scrape and writes the final build prompt, so it doesn't end up describing different features than the sections above it.
+This used to be four calls (three parallel "analyst" agents plus the build-prompt one), each resending the full scraped content. That fell apart under real traffic: Groq's free tier caps at 30 requests/minute and 12,000 tokens/minute, and a single analysis under the four-call design could use most of that budget by itself, before any other user touched the site. Two calls, content sent once instead of up to four times, fits comfortably within the free tier for normal usage.
 
 `verifySeenClaims()` then runs on the combined output: it pulls every dollar amount and percentage tagged `[SEEN]` and checks whether that figure actually appears in the scraped page text. Anything that doesn't match gets called out in a footer, which gets cached along with the rest.
 
-The response still streams to the client the same way it always did, the frontend didn't change. Since all four agent calls finish before anything is sent, that stream is a chunked reveal of the already-finished text rather than live tokens; the visible effect is the same.
+The response still streams to the client the same way it always did, the frontend didn't change. Since both calls finish before anything is sent, that stream is a chunked reveal of the already-finished text rather than live tokens; the visible effect is the same.
 
 The "Re-analyze" button sends `force: true`, which skips the cache and reruns the whole pipeline.
+
+A 429 from Groq gets classified two ways: a short per-minute burst gets retried automatically with backoff, but the daily token quota (100,000/day on the free tier) being fully spent doesn't - retrying does nothing when Groq itself says "try again in an hour." The user gets an honest message either way instead of a generic "something went wrong."
 
 Rate limiting is still a plain in-memory `Map`, not shared across instances. On a single Vercel instance that's fine; if this gets deployed with several instances running concurrently, the real limit is instances × 8 requests per 10 minutes, not a hard 8. Not fixed yet, see [SECURITY.md](SECURITY.md) for the tradeoff.
 

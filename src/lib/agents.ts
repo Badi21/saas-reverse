@@ -17,7 +17,11 @@ Rules:
 - Churn vectors must come from real signals in the content, not generic guesses.
 - Build prompt must be complete enough to paste directly into an AI coding assistant and start building.`;
 
-const CORE_SECTIONS = `## What it does
+// One combined call instead of three parallel ones. Groq's free tier caps
+// at 12000 tokens/minute - three parallel calls each resending the full
+// scraped content came close to blowing that on a single analysis, before
+// any concurrent user. One call means the content gets sent once, not 3x.
+const ANALYSIS_SECTIONS = `## What it does
 2-3 specific sentences. Actual product behavior, not taglines. Include price if visible.
 
 ## Target users
@@ -34,9 +38,9 @@ Type = Core / Differentiator / Table stakes
 - Paid tiers: name + price + what unlocks (use [SEEN] if on the page, [INFERRED] if guessed)
 - Upgrade gate: the exact friction that converts free to paid
 - Trial mechanics: days, card required?
-- Enterprise signals: SSO, audit logs, SLA?`;
+- Enterprise signals: SSO, audit logs, SLA?
 
-const STRATEGY_SECTIONS = `## Moat analysis
+## Moat analysis
 For each: Strong / Moderate / Weak / None + one-line evidence
 - Network effects:
 - Switching costs:
@@ -52,9 +56,9 @@ If building a competitor:
 - Underserved segment the incumbent ignores
 - One feature that would win switchers
 - Pricing angle that works in a niche
-- What the incumbent will never build (and why)`;
+- What the incumbent will never build (and why)
 
-const TECH_SECTIONS = `## Tech stack
+## Tech stack
 Markdown table with Layer / Stack / Confidence ([SEEN] in HTML/headers, [INFERRED] from patterns):
 Frontend, Backend, Database, Auth, Payments, Infrastructure, Analytics
 
@@ -131,7 +135,7 @@ export function isDailyQuotaError(err: unknown): boolean {
   return message.toLowerCase().includes('per day');
 }
 
-const RETRY_DELAYS_MS = [1500, 4000];
+const RETRY_DELAYS_MS = [2500, 7000];
 
 async function runAgent(groq: Groq, userPrompt: string, maxTokens: number): Promise<string> {
   for (let attempt = 0; ; attempt++) {
@@ -154,12 +158,12 @@ async function runAgent(groq: Groq, userPrompt: string, maxTokens: number): Prom
   }
 }
 
-// Two-wave pipeline instead of one giant sequential completion. Wave one
-// runs three focused agents in parallel (product/business, strategy,
-// tech/build) so wall-clock time is roughly the slowest of the three, not
-// their sum, and each prompt is narrow enough that the model has less room
-// to wander. Wave two synthesizes the final build prompt from wave one's
-// output, so it doesn't contradict the sections it's supposed to summarize.
+// Two sequential calls: one full analysis, then a build-prompt synthesis
+// that reads the analysis instead of re-reading the raw scrape. Used to be
+// three parallel analysis agents plus this one, which meant sending the
+// scraped content 4 times total and firing 3 requests in the same instant -
+// past what Groq's free tier (30 RPM, 12000 TPM) allows for one analysis,
+// before any other user's traffic. Two calls, content sent once, fits.
 export async function runAnalysisPipeline(
   apiKey: string,
   domain: string,
@@ -168,13 +172,7 @@ export async function runAnalysisPipeline(
 ): Promise<string> {
   const groq = new Groq({ apiKey });
 
-  const [core, strategy, tech] = await Promise.all([
-    runAgent(groq, analysisPrompt(domain, meta, content, CORE_SECTIONS), 1400),
-    runAgent(groq, analysisPrompt(domain, meta, content, STRATEGY_SECTIONS), 700),
-    runAgent(groq, analysisPrompt(domain, meta, content, TECH_SECTIONS), 1100),
-  ]);
-
-  const analysis = [core, strategy, tech].join('\n\n');
+  const analysis = await runAgent(groq, analysisPrompt(domain, meta, content, ANALYSIS_SECTIONS), 3200);
   const buildPrompt = await runAgent(groq, buildPromptSynthesisPrompt(domain, analysis), 1300);
 
   return [analysis, buildPrompt].join('\n\n');
