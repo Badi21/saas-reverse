@@ -25,7 +25,7 @@ export default function AnalyzePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function run() {
+  async function run(force = false) {
     setLoading(true);
     setOutput('');
     setError('');
@@ -34,7 +34,7 @@ export default function AnalyzePage() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: rawDomain }),
+        body: JSON.stringify({ domain: rawDomain, force }),
       });
 
       if (!res.ok) {
@@ -101,7 +101,7 @@ export default function AnalyzePage() {
             <span className="font-mono text-sm text-zinc-300">{resolvedDomain}</span>
           </div>
           <button
-            onClick={() => { started.current = false; run(); }}
+            onClick={() => { started.current = false; run(true); }}
             disabled={loading}
             className="text-xs text-zinc-600 hover:text-zinc-400 border border-[#1e1e1e] hover:border-[#333] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
           >

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import dns from 'dns';
 import { checkRateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
+import { getCachedAnalysis, saveAnalysis } from '@/lib/db';
+
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const MAX_CONTENT_PER_PAGE = 4000;
@@ -365,9 +368,11 @@ export async function POST(req: NextRequest) {
   }
 
   let rawDomain: string;
+  let force = false;
   try {
     const body = await req.json();
     rawDomain = body.domain?.trim();
+    force = body.force === true;
     if (!rawDomain) throw new Error('Missing domain');
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
@@ -384,6 +389,20 @@ export async function POST(req: NextRequest) {
   }
 
   const domain = new URL(safeBase).hostname;
+
+  if (!force) {
+    const cached = getCachedAnalysis(domain, CACHE_TTL_MS);
+    if (cached) {
+      return new Response(cached.content, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Resolved-Domain': domain,
+          'X-Cache': 'HIT',
+        },
+      });
+    }
+  }
 
   // Scrape the SaaS
   const { content, meta } = await scrapeSaaS(safeBase);
@@ -409,15 +428,22 @@ export async function POST(req: NextRequest) {
   });
 
   const encoder = new TextEncoder();
+  let fullOutput = '';
   const readableStream = new ReadableStream({
     async start(controller) {
       try {
         for await (const chunk of stream) {
           const text = chunk.choices[0]?.delta?.content || '';
-          if (text) controller.enqueue(encoder.encode(text));
+          if (text) {
+            fullOutput += text;
+            controller.enqueue(encoder.encode(text));
+          }
         }
       } finally {
         controller.close();
+        if (fullOutput.length > 100) {
+          saveAnalysis({ domain, title: meta.title, description: meta.description, content: fullOutput });
+        }
       }
     },
   });
@@ -428,6 +454,7 @@ export async function POST(req: NextRequest) {
       'Transfer-Encoding': 'chunked',
       'X-Content-Type-Options': 'nosniff',
       'X-Resolved-Domain': domain,
+      'X-Cache': 'MISS',
     },
   });
 }

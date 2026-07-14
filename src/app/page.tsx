@@ -1,7 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+interface RecentAnalysis {
+  domain: string;
+  title: string;
+  createdAt: number;
+}
 
 const EXAMPLES = ['notion', 'linear', 'framer', 'cal', 'loom'];
 
@@ -35,7 +41,15 @@ function GitHubIcon() {
 
 export default function Home() {
   const [domain, setDomain] = useState('');
+  const [recent, setRecent] = useState<RecentAnalysis[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch('/api/history')
+      .then(res => res.json())
+      .then(data => setRecent(data.analyses || []))
+      .catch(() => {});
+  }, []);
 
   function analyze(e: React.FormEvent) {
     e.preventDefault();
@@ -207,6 +221,26 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* Recently analyzed */}
+      {recent.length > 0 && (
+        <section className="max-w-2xl mx-auto px-6 pb-16">
+          <p className="font-mono text-xs text-zinc-700 uppercase tracking-widest mb-3">
+            Recently analyzed
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {recent.map(item => (
+              <button
+                key={item.domain}
+                onClick={() => router.push(`/${item.domain}`)}
+                className="font-mono text-xs text-zinc-500 hover:text-zinc-200 border border-[#1a1a1a] hover:border-zinc-600 px-3 py-1.5 rounded-full transition-colors"
+              >
+                {item.domain}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-[#111] px-6 py-5">
