@@ -79,22 +79,35 @@ src/
 │  ├─ page.tsx                 landing page + recent-analyses list
 │  ├─ [domain]/page.tsx        streams the blueprint for a domain
 │  └─ api/
-│     ├─ analyze/route.ts      scrape, check cache, stream from the LLM, persist
+│     ├─ analyze/route.ts      scrape, check cache, run the agent pipeline, persist
 │     └─ history/route.ts      last 20 analyses, for the homepage list
 └─ lib/
    ├─ rate-limit.ts            in-memory sliding-window limiter per IP
-   └─ db.ts                    SQLite (better-sqlite3) repository
+   ├─ db.ts                    SQLite (better-sqlite3) repository
+   ├─ agents.ts                the two-wave analysis pipeline
+   └─ verify-claims.ts         checks [SEEN] price/percentage claims against the scrape
 ```
 
 What happens on a request to `/api/analyze`:
 
 1. Rate limit check first: 8 requests per 10 minutes per IP. This runs before any scraping, so someone hammering the endpoint can't run up the Groq bill.
-2. Cache check: if the domain was analyzed in the last 6 hours, it returns that result immediately. No re-scrape, no LLM call.
-3. Otherwise it scrapes the site (with SSRF guards active), streams the analysis from Groq, and writes the finished result to SQLite once the stream ends.
+2. Cache check: if the domain was analyzed in the last 6 hours, it returns that result immediately. No re-scrape, no LLM calls.
+3. Otherwise it scrapes the site (SSRF guards active) and runs the analysis pipeline, then writes the finished result to SQLite.
 
-The "Re-analyze" button sends `force: true`, which skips the cache and reruns everything.
+### The analysis pipeline
 
-I kept this to two small modules instead of adding Redis or a hosted rate-limiter. Cache and history share one table, and the limiter is just a `Map` that resets on redeploy. That's a real limitation, not an oversight, see [SECURITY.md](SECURITY.md) for what it does and doesn't cover.
+One giant prompt asking for every section at once is slow and gives the model more room to wander. `src/lib/agents.ts` splits it into two waves instead:
+
+- **Wave one, three agents in parallel:** a product/business agent (what it does, target users, features, pricing), a strategy agent (moat, churn, differentiation), and a tech agent (stack, build complexity, pages, user flows). Same source content, same rules, each one only asked for its own slice. Wall-clock time is roughly the slowest of the three, not their sum.
+- **Wave two, one agent:** takes wave one's combined output plus the original scrape and writes the final build prompt, so it doesn't end up describing different features than the sections above it.
+
+`verifySeenClaims()` then runs on the combined output: it pulls every dollar amount and percentage tagged `[SEEN]` and checks whether that figure actually appears in the scraped page text. Anything that doesn't match gets called out in a footer, which gets cached along with the rest.
+
+The response still streams to the client the same way it always did, the frontend didn't change. Since all four agent calls finish before anything is sent, that stream is a chunked reveal of the already-finished text rather than live tokens; the visible effect is the same.
+
+The "Re-analyze" button sends `force: true`, which skips the cache and reruns the whole pipeline.
+
+Rate limiting is still a plain in-memory `Map`, not shared across instances. On a single Vercel instance that's fine; if this gets deployed with several instances running concurrently, the real limit is instances × 8 requests per 10 minutes, not a hard 8. Not fixed yet, see [SECURITY.md](SECURITY.md) for the tradeoff.
 
 ---
 

@@ -24,7 +24,7 @@ This covers the common SSRF-to-internal-network and SSRF-to-cloud-metadata patte
 
 `/api/analyze` calls a paid LLM API on every uncached request, so this is a cost problem as much as a security one. Each client IP (from `X-Forwarded-For`, falling back to `X-Real-IP`) gets 8 requests per 10-minute window, checked before any scrape or LLM call happens.
 
-It's in-memory and per-process: resets on redeploy, doesn't share state across multiple serverless instances. That's fine for a single-instance deployment. Behind a load balancer running several instances, you'd want a shared store instead (Upstash Redis, Vercel KV) so the limit actually holds.
+It's in-memory and per-process: resets on redeploy, doesn't share state across multiple serverless instances. Under real concurrent traffic on Vercel, each instance keeps its own count, so the effective limit is closer to (instances × 8) per 10 minutes than a hard 8. That's a known tradeoff, not an oversight, fixing it properly needs a shared store (Upstash Redis, or Vercel's Marketplace Redis integration) and wasn't worth adding yet for the traffic this gets. The cache in `db.ts` already absorbs most of the load from repeat lookups of the same domain, which matters more in practice than a perfectly enforced per-IP limit.
 
 ### Claim verification (`src/lib/verify-claims.ts`)
 

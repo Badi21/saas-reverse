@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
 import dns from 'dns';
 import { checkRateLimit, clientKeyFromHeaders } from '@/lib/rate-limit';
 import { getCachedAnalysis, saveAnalysis } from '@/lib/db';
 import { verifySeenClaims } from '@/lib/verify-claims';
+import { runAnalysisPipeline } from '@/lib/agents';
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const MAX_CONTENT_PER_PAGE = 4000;
 const FETCH_TIMEOUT_MS = 7000;
 const MAX_REDIRECTS = 3;
@@ -267,92 +265,6 @@ async function scrapeSaaS(base: string): Promise<{ content: string; meta: { titl
   return { content, meta };
 }
 
-const SYSTEM_PROMPT = `You are a venture-analyst who reverse-engineers SaaS products for builders who want to recreate or compete with them.
-
-Rules:
-- Specific over vague. Never say "a platform that helps users." Say "project management for async remote teams at $8/seat/month."
-- Use real numbers from the content when visible.
-- Distinguish what you saw ([SEEN]) from what you inferred ([INFERRED]).
-- Moat analysis must be honest — most SaaS have weak moats. Say so.
-- Churn vectors must come from real signals in the content, not generic guesses.
-- Build prompt must be complete enough to paste directly into an AI coding assistant and start building.`;
-
-function buildUserPrompt(domain: string, meta: { title: string; description: string }, content: string): string {
-  return `Analyze this SaaS and output a venture-analyst-grade build blueprint.
-
-Domain: ${domain}
-${meta.title ? `Title: ${meta.title}` : ''}
-${meta.description ? `Meta description: ${meta.description}` : ''}
-
-Scraped content:
-${content}
-
----
-
-Output the blueprint using these exact sections in order:
-
-## What it does
-2-3 specific sentences. Actual product behavior, not taglines. Include price if visible.
-
-## Target users
-Role + company size + trigger moment (when does someone first need this?). Example: "Engineering managers at 10-50 person startups who've outgrown GitHub Issues. Trigger: team grows past 8 engineers."
-
-## Core features
-10-18 features as a markdown table:
-| Feature | Type | Description |
-|---------|------|-------------|
-Type = Core / Differentiator / Table stakes
-
-## Business model
-- Free tier: what's included and the hard limit
-- Paid tiers: name + price + what unlocks (use [SEEN] if on the page, [INFERRED] if guessed)
-- Upgrade gate: the exact friction that converts free to paid
-- Trial mechanics: days, card required?
-- Enterprise signals: SSO, audit logs, SLA?
-
-## Moat analysis
-For each: Strong / Moderate / Weak / None + one-line evidence
-- Network effects:
-- Switching costs:
-- Data advantage:
-- Brand/community:
-- Integrations:
-
-## Churn vectors
-Top 3 reasons users would leave — infer from feature gaps, pricing structure, or missing capabilities visible in the content. Label each [SEEN] or [INFERRED].
-
-## Tech stack
-Markdown table with Layer / Stack / Confidence ([SEEN] in HTML/headers, [INFERRED] from patterns):
-Frontend, Backend, Database, Auth, Payments, Infrastructure, Analytics
-
-## Build complexity
-Estimate in days for a 2-person team:
-- Data model + migrations: X days
-- Auth + team/org structure: X days
-- Core feature loop: X days
-- Payments/billing: X days
-- **MVP total: X weeks**
-
-## Differentiation angle
-If building a competitor:
-- Underserved segment the incumbent ignores
-- One feature that would win switchers
-- Pricing angle that works in a niche
-- What the incumbent will never build (and why)
-
-## Pages to build
-All pages including app views, not just marketing pages.
-
-## Core user flows
-Three numbered flows:
-1. Onboarding (include drop-off risks)
-2. Daily core action (the habit loop)
-3. Upgrade moment (exact trigger)
-
-## Build prompt
-Complete prompt to paste into Claude Code or Cursor. Must include: product description, target user, full feature list with behaviors, data models as TypeScript types, all pages, three user flows, business rules (free tier limits, upgrade gates), and tech stack. Start with: "Build a [type] SaaS..."`;
-}
-
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
@@ -415,45 +327,36 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const groq = new Groq({ apiKey });
+  let fullOutput: string;
+  try {
+    fullOutput = await runAnalysisPipeline(apiKey, domain, meta, content);
+  } catch {
+    return NextResponse.json({ error: 'Analysis failed. Try again in a moment.' }, { status: 502 });
+  }
 
-  const stream = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt(domain, meta, content) },
-    ],
-    temperature: 0.3,
-    max_tokens: 4500,
-    stream: true,
-  });
+  const checks = verifySeenClaims(fullOutput, content);
+  const failed = checks.filter(c => !c.verified);
+  if (failed.length > 0) {
+    fullOutput += `\n\n---\n*Verification: ${failed.length} of ${checks.length} [SEEN] figures could not be found in the scraped source (${failed.map(c => c.claim).join(', ')}). Treat those as unconfirmed.*`;
+  }
 
+  if (fullOutput.length > 100) {
+    saveAnalysis({ domain, title: meta.title, description: meta.description, content: fullOutput });
+  }
+
+  // ponytail: the agents above already ran to completion, so this isn't a
+  // real token stream, just a chunked reveal of the finished text. Keeps
+  // the frontend's existing streaming UI working without touching it.
   const encoder = new TextEncoder();
-  let fullOutput = '';
+  const finalOutput = fullOutput;
   const readableStream = new ReadableStream({
     async start(controller) {
-      try {
-        for await (const chunk of stream) {
-          const text = chunk.choices[0]?.delta?.content || '';
-          if (text) {
-            fullOutput += text;
-            controller.enqueue(encoder.encode(text));
-          }
-        }
-
-        const checks = verifySeenClaims(fullOutput, content);
-        const failed = checks.filter(c => !c.verified);
-        if (failed.length > 0) {
-          const footer = `\n\n---\n*Verification: ${failed.length} of ${checks.length} [SEEN] figures could not be found in the scraped source (${failed.map(c => c.claim).join(', ')}). Treat those as unconfirmed.*`;
-          controller.enqueue(encoder.encode(footer));
-          fullOutput += footer;
-        }
-      } finally {
-        controller.close();
-        if (fullOutput.length > 100) {
-          saveAnalysis({ domain, title: meta.title, description: meta.description, content: fullOutput });
-        }
+      const CHUNK_SIZE = 60;
+      for (let i = 0; i < finalOutput.length; i += CHUNK_SIZE) {
+        controller.enqueue(encoder.encode(finalOutput.slice(i, i + CHUNK_SIZE)));
+        await new Promise(resolve => setTimeout(resolve, 6));
       }
+      controller.close();
     },
   });
 
