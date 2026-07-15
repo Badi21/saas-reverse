@@ -81,18 +81,20 @@ src/
 │  ├─ page.tsx                 landing page + recent-analyses list
 │  ├─ layout.tsx                root metadata, JSON-LD, fonts
 │  ├─ icon.svg / apple-icon.tsx / opengraph-image.tsx    favicon + social preview image
-│  ├─ robots.ts / sitemap.ts    generated at /robots.txt and /sitemap.xml
+│  ├─ robots.ts / sitemap.ts    generated at /robots.txt and /sitemap.xml, explicitly allows GPTBot/ClaudeBot/PerplexityBot
 │  ├─ [domain]/
 │  │  ├─ page.tsx              streams the blueprint for a domain
 │  │  └─ layout.tsx            per-domain title/description/canonical
 │  └─ api/
 │     ├─ analyze/route.ts      scrape, check cache, run the agent pipeline, persist
 │     └─ history/route.ts      last 20 analyses, for the homepage list
-└─ lib/
-   ├─ rate-limit.ts            in-memory sliding-window limiter per IP
-   ├─ db.ts                    Postgres (Neon serverless driver) repository
-   ├─ agents.ts                the two-wave analysis pipeline
-   └─ verify-claims.ts         checks [SEEN] price/percentage claims against the scrape
+├─ lib/
+│  ├─ rate-limit.ts            in-memory sliding-window limiter per IP
+│  ├─ db.ts                    Postgres (Neon serverless driver) repository
+│  ├─ agents.ts                the two-wave analysis pipeline
+│  └─ verify-claims.ts         checks [SEEN] price/percentage claims against the scrape
+public/
+└─ llms.txt                    structured summary for AI crawlers (ChatGPT, Claude, Perplexity)
 ```
 
 Every domain that gets analyzed becomes its own indexable page (`/notion.so`, `/linear.app`, ...) with a unique title and description generated from the domain name, and shows up in the sitemap. That's real long-tail SEO surface, not just a landing page: someone searching "notion.so tech stack" or "reverse engineer linear.app" has something specific to land on.

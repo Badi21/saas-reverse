@@ -4,9 +4,12 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 
 const SITE_URL = 'https://saas-reverse.com';
-const TITLE = 'saas-reverse: reverse any SaaS into a build blueprint';
+// Keyword phrase first ("reverse engineer any saas" is what people actually
+// type), brand last. A brand-new domain has zero brand-search volume yet,
+// so the title's job is matching what someone would search, not recall.
+const TITLE = 'Reverse Engineer Any SaaS: AI Build Blueprint | saas-reverse';
 const DESCRIPTION =
-  'Enter any SaaS domain and get a structured breakdown: features, pricing, moat analysis, churn vectors, real tech stack, and a build prompt ready to paste into Claude Code or Cursor.';
+  'Enter any SaaS domain and get its features, pricing, tech stack, and moat analyzed instantly, plus a build prompt ready for Claude Code or Cursor.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

@@ -12,42 +12,41 @@ export default function OpengraphImage() {
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           justifyContent: 'center',
           background: '#080808',
-          backgroundImage: 'radial-gradient(#1c1c1c 2px, transparent 2px)',
-          backgroundSize: '36px 36px',
           padding: '90px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 48 }}>
           <div
             style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: '#0a0a0a',
-              border: '1px solid #1e1e1e',
+              width: 44,
+              height: 44,
+              borderRadius: 10,
+              border: '1px solid #a3e635',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#a3e635',
-              fontSize: 28,
+              fontSize: 22,
               fontFamily: 'monospace',
               fontWeight: 700,
             }}
           >
             {'>_'}
           </div>
-          <div style={{ color: '#71717a', fontSize: 28, fontFamily: 'monospace' }}>saas-reverse</div>
+          <div style={{ color: '#a3e635', fontSize: 30, fontFamily: 'monospace', fontWeight: 700 }}>
+            saas-reverse
+          </div>
         </div>
         <div
           style={{
             color: '#f0f0f0',
-            fontSize: 68,
+            fontSize: 72,
             fontWeight: 700,
-            lineHeight: 1.15,
-            maxWidth: 950,
+            lineHeight: 1.12,
+            textAlign: 'center',
           }}
         >
           Reverse any SaaS.
@@ -55,16 +54,17 @@ export default function OpengraphImage() {
         <div
           style={{
             color: '#a3e635',
-            fontSize: 68,
+            fontSize: 72,
             fontWeight: 700,
-            lineHeight: 1.15,
-            marginBottom: 32,
+            lineHeight: 1.12,
+            marginBottom: 36,
+            textAlign: 'center',
           }}
         >
           Build your version.
         </div>
-        <div style={{ color: '#71717a', fontSize: 30, maxWidth: 800 }}>
-          Enter a domain. Get features, pricing, moat, tech stack, and a build prompt.
+        <div style={{ color: '#71717a', fontSize: 30, textAlign: 'center', maxWidth: 780 }}>
+          Enter a domain. Get features, stack, flows, and a prompt to build it.
         </div>
       </div>
     ),

@@ -1,0 +1,36 @@
+# saas-reverse
+
+> Reverse-engineer any SaaS into a build blueprint: features, pricing, moat analysis, churn vectors, real tech stack, and a build prompt for AI coding assistants.
+
+## What it does
+
+Enter a SaaS domain (e.g. notion.so, linear.app) and get a structured breakdown:
+
+- What the product actually does, for whom, and at what price
+- Feature map, tagged Core / Differentiator / Table stakes
+- Business model: free tier limits, paid tiers, the exact upgrade trigger
+- Moat analysis: network effects, switching costs, data, brand, scored honestly
+- Top churn vectors inferred from pricing and feature gaps
+- Real tech stack, tagged by whether it was directly observed or inferred
+- Build complexity estimate in days for a 2-person team
+- A complete build prompt ready to paste into Claude Code, Cursor, or any AI coding assistant
+
+Every analyzed domain becomes its own page at saas-reverse.com/{domain}, each with a unique title, description, and canonical URL.
+
+## Key pages
+
+- [Homepage](https://saas-reverse.com): enter a domain, run an analysis
+- [GitHub repository](https://github.com/Badi21/saas-reverse): source code, GPL-3.0 licensed
+- [Sitemap](https://saas-reverse.com/sitemap.xml): all analyzed domains
+
+## Facts
+
+- Free to use, no signup or account required
+- Analysis takes roughly 30-50 seconds, cached for 6 hours per domain
+- Built with Next.js 15, Groq (Llama 3.3 70B) for the analysis, Postgres (Neon) for the cache
+- Open source under the GPL-3.0 license
+- Also available as a Claude Code skill for running analyses from the CLI
+
+## Contact
+
+Issues, source, and licensing: https://github.com/Badi21/saas-reverse
