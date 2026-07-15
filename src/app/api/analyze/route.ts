@@ -339,12 +339,15 @@ export async function POST(req: NextRequest) {
   try {
     fullOutput = await runAnalysisPipeline(apiKey, domain, meta, content);
   } catch (err) {
+    // User-facing copy stays vendor-agnostic on purpose - "Groq" and "rate
+    // limit" are our implementation details, not something a visitor needs
+    // to know. console.error above keeps the real cause for us.
     console.error(`[analyze] pipeline failed for ${domain}:`, err);
     const message = isDailyQuotaError(err)
-      ? "Groq's free-tier daily token quota is used up for today. Try again in about an hour."
+      ? "We're seeing a lot of demand right now and have hit today's limit. Please try again in about an hour."
       : isRateLimitError(err)
-      ? "We're getting a lot of analyses right now and hit Groq's rate limit. Try again in a minute."
-      : 'Analysis failed. Try again in a moment.';
+      ? "We're getting a lot of analyses right now. Please try again in a minute."
+      : "Something went wrong on our end. Please try again in a moment.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
